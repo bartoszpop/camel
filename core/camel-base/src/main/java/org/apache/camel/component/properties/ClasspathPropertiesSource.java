@@ -22,6 +22,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
+import java.net.URL;
+import java.util.Enumeration;
 import java.util.Properties;
 
 import org.apache.camel.Ordered;
@@ -49,31 +51,38 @@ public class ClasspathPropertiesSource extends AbstractLocationPropertiesSource 
 
     @Override
     public Properties loadPropertiesFromLocation(PropertiesComponent propertiesComponent, PropertiesLocation location) {
-        Properties answer = new OrderedProperties();
-        String path = location.getPath();
+      Properties answer = new OrderedProperties();
+      String path = location.getPath();
 
-        InputStream is = propertiesComponent.getCamelContext().getClassResolver().loadResourceAsStream(path);
-        Reader reader = null;
-        if (is == null) {
+      Enumeration<URL> resources = propertiesComponent.getCamelContext().getClassResolver().loadResourcesAsURL(path);
+      while (resources.hasMoreElements()) {
+        URL resource = resources.nextElement();
+        try (InputStream is = resource.openStream()) {
+          Reader reader = null;
+          if (is == null) {
             if (!propertiesComponent.isIgnoreMissingLocation() && !location.isOptional()) {
-                throw RuntimeCamelException.wrapRuntimeCamelException(
-                        new FileNotFoundException("Properties file " + path + " not found in classpath"));
+              throw RuntimeCamelException.wrapRuntimeCamelException(
+                  new FileNotFoundException("Properties file " + path + " not found in classpath"));
             }
-        } else {
+          } else {
             try {
-                if (propertiesComponent.getEncoding() != null) {
-                    reader = new BufferedReader(new InputStreamReader(is, propertiesComponent.getEncoding()));
-                    answer.load(reader);
-                } else {
-                    answer.load(is);
-                }
+              if (propertiesComponent.getEncoding() != null) {
+                reader = new BufferedReader(new InputStreamReader(is, propertiesComponent.getEncoding()));
+                answer.load(reader);
+              } else {
+                answer.load(is);
+              }
             } catch (IOException e) {
-                throw RuntimeCamelException.wrapRuntimeCamelException(e);
+              throw RuntimeCamelException.wrapRuntimeCamelException(e);
             } finally {
-                IOHelper.close(reader, is);
+              IOHelper.close(reader, is);
             }
+          }
+        } catch (IOException e) {
+          throw RuntimeCamelException.wrapRuntimeCamelException(e);
         }
-        return answer;
+      }
+      return answer;
     }
 
     @Override
